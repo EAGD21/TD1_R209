@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Instant Weather</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="stars" aria-hidden="true"></div>
+
+  <div class="wrapper">
+    <header>
+      <h1 class="logo">⛅ Instant Weather</h1>
+      <p class="tagline">Météo française en temps réel</p>
+    </header>
+
+    <main>
+      <div class="card">
+
+        <!-- Formulaire -->
+        <div class="form-group">
+          <label for="codePostal">Code postal</label>
+          <input
+            type="text"
+            id="codePostal"
+            placeholder="ex : 14000"
+            maxlength="5"
+            pattern="[0-9]{5}"
+            inputmode="numeric"
+            aria-required="true"
+            aria-describedby="cpHelp"
+          />
+          <span id="cpHelp" class="field-help">Saisissez un code postal français à 5 chiffres</span>
+        </div>
+
+        <div class="form-group">
+          <label for="commune">Commune</label>
+          <select id="commune" disabled aria-required="true">
+            <option value="">— saisissez d'abord un code postal —</option>
+          </select>
+        </div>
+
+        <button class="btn" id="searchBtn" disabled type="button" aria-label="Obtenir la météo">
+          Voir la météo →
+        </button>
+      </div>
+
+      <!-- Loader -->
+      <div class="loader" id="loader" role="status" aria-live="polite">
+        <div class="spinner" aria-hidden="true"></div>
+        Récupération des données…
+      </div>
+
+      <!-- Erreur -->
+      <div class="error" id="errorMsg" role="alert" aria-live="assertive"></div>
+
+      <!-- Résultat -->
+      <div class="result" id="result" aria-live="polite">
+        <div class="result-header">
+          <div class="result-city" id="resultCity"></div>
+          <div class="result-date" id="resultDate"></div>
+        </div>
+        <div class="metrics" id="metrics"></div>
+      </div>
+    </main>
+
+    <footer>
+      <p>Données météo : <a href="https://api.meteo-concept.com/" target="_blank" rel="noopener">MétéoConcept</a> · Communes : <a href="https://geo.api.gouv.fr/" target="_blank" rel="noopener">geo.api.gouv.fr</a></p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
