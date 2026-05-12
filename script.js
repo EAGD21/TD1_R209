@@ -1,177 +1,110 @@
-/* ── Éléments DOM ── */
-const cpInput    = document.getElementById('codePostal');
+const cityForm = document.getElementById('cityForm');
+const communeStep = document.getElementById('communeStep');
+const cpInput = document.getElementById('codePostal');
 const communeSel = document.getElementById('commune');
-const searchBtn  = document.getElementById('searchBtn');
-const loader     = document.getElementById('loader');
-const errorMsg   = document.getElementById('errorMsg');
-const result     = document.getElementById('result');
+const searchBtn = document.getElementById('searchBtn');
+const loader = document.getElementById('loader');
+const errorMsg = document.getElementById('errorMsg');
+const result = document.getElementById('result');
 const resultCity = document.getElementById('resultCity');
 const resultDate = document.getElementById('resultDate');
-const metrics    = document.getElementById('metrics');
+const metrics = document.getElementById('metrics');
+const reloadBtn = document.getElementById('reloadBtn');
 
-/* ── Stockage des coordonnées de la commune sélectionnée ── */
-let communeCoords = null; // { lat, lon }
-
-/* ── Utilitaires ── */
-function showError(msg) {
-  errorMsg.textContent = msg;
-  errorMsg.classList.add('visible');
-  result.classList.remove('visible');
-  loader.classList.remove('visible');
-}
-
-function clearError() {
-  errorMsg.classList.remove('visible');
-  errorMsg.textContent = '';
-}
-
-function setLoader(on) {
-  loader.classList.toggle('visible', on);
-}
-
-/* ── 1. Chargement des communes par code postal ── */
 let debounceTimer;
 
+// 1. Écoute du Code Postal
 cpInput.addEventListener('input', () => {
-  clearError();
-  communeSel.disabled = true;
-  communeSel.innerHTML = '<option value="">Chargement…</option>';
-  searchBtn.disabled = true;
-  communeCoords = null;
-
   const cp = cpInput.value.trim();
+  errorMsg.classList.remove('visible');
 
-  if (!/^\d{5}$/.test(cp)) {
-    communeSel.innerHTML = '<option value="">— saisissez d\'abord un code postal —</option>';
-    return;
+  if (/^\d{5}$/.test(cp)) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => fetchCommunes(cp), 300);
+  } else {
+    communeStep.classList.remove('visible');
   }
-
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => fetchCommunes(cp), 400);
 });
 
+// 2. Récupération des communes via geo.api.gouv.fr [cite: 27]
 async function fetchCommunes(cp) {
   try {
-    const res = await fetch(
-      `https://geo.api.gouv.fr/communes?codePostal=${cp}&fields=nom,code,centre&format=json`
-    );
-
-    if (!res.ok) throw new Error('Erreur réseau');
-
+    const res = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${cp}`);
     const data = await res.json();
 
     if (!data.length) {
-      communeSel.innerHTML = '<option value="">Aucune commune trouvée</option>';
+      showError("Aucune ville trouvée pour ce code postal.");
+      communeStep.classList.remove('visible');
       return;
     }
 
-    communeSel.innerHTML = '<option value="">— choisissez une commune —</option>';
+    communeSel.innerHTML = '';
     data.forEach(c => {
       const opt = document.createElement('option');
-      opt.value = c.code;
+      opt.value = c.code; // Code INSEE
       opt.textContent = c.nom;
-      if (c.centre && c.centre.coordinates) {
-        opt.dataset.lat = c.centre.coordinates[1];
-        opt.dataset.lon = c.centre.coordinates[0];
-      }
       communeSel.appendChild(opt);
     });
 
-    communeSel.disabled = false;
+    communeStep.classList.add('visible');
   } catch (e) {
-    showError('Impossible de récupérer les communes. Vérifiez votre connexion.');
+    showError("Erreur lors de la récupération des communes.");
   }
 }
 
-/* ── 2. Activation du bouton quand une commune est choisie ── */
-communeSel.addEventListener('change', () => {
-  const selected = communeSel.options[communeSel.selectedIndex];
-  if (communeSel.value && selected.dataset.lat) {
-    communeCoords = { lat: selected.dataset.lat, lon: selected.dataset.lon };
-    searchBtn.disabled = false;
-  } else {
-    communeCoords = null;
-    searchBtn.disabled = true;
-  }
-  clearError();
-});
-
-/* ── 3. Récupération météo via Open-Meteo ── */
+// 3. Appel API MétéoConcept [cite: 29]
 searchBtn.addEventListener('click', async () => {
-  const communeName = communeSel.options[communeSel.selectedIndex].text;
+  const insee = communeSel.value;
+  const name = communeSel.options[communeSel.selectedIndex].text;
 
-  if (!communeCoords) { showError('Coordonnées de la commune introuvables.'); return; }
-
-  clearError();
-  setLoader(true);
-  result.classList.remove('visible');
+  cityForm.style.display = 'none';
+  loader.classList.add('visible');
+  errorMsg.classList.remove('visible');
 
   try {
-    const url = `https://api.open-meteo.com/v1/forecast`
-      + `?latitude=${communeCoords.lat}`
-      + `&longitude=${communeCoords.lon}`
-      + `&daily=temperature_2m_min,temperature_2m_max,precipitation_probability_max,sunshine_duration`
-      + `&timezone=Europe%2FParis`
-      + `&forecast_days=1`;
-
-    const res = await fetch(url);
-
-    if (!res.ok) throw new Error(`Erreur API météo (${res.status}).`);
-
+    // Utilisation des paramètres requis : Tmin, Tmax, Probabilité pluie, Ensoleillement [cite: 16, 17, 18, 19]
+    const token = "4bba169b3e3365061d39563419ab23e5016c0f838ba282498439c41a00ef1091";
+    const res = await fetch(`https://api.meteo-concept.com/api/forecast/daily/0?token=${token}&insee=${insee}`);
     const data = await res.json();
-    const d = data.daily;
 
-    if (!d) throw new Error('Données météo indisponibles pour cette commune.');
+    if (!data.forecast) throw new Error("Données météo indisponibles.");
 
-    // sunshine_duration est en secondes → conversion en heures
-    const sunHours = d.sunshine_duration?.[0] !== undefined
-      ? Math.round(d.sunshine_duration[0] / 3600 * 10) / 10
-      : null;
-
-    const forecast = {
-      tmin:     d.temperature_2m_min?.[0]            ?? null,
-      tmax:     d.temperature_2m_max?.[0]            ?? null,
-      rr10:     d.precipitation_probability_max?.[0] ?? null,
-      sunHours
-    };
-
-    displayResult(communeName, forecast);
-
+    displayWeather(name, data.forecast);
   } catch (e) {
-    showError(e.message || 'Une erreur est survenue. Réessayez.');
+    showError(e.message);
+    cityForm.style.display = 'block';
   } finally {
-    setLoader(false);
+    loader.classList.remove('visible');
   }
 });
 
-/* ── 4. Affichage des résultats ── */
-function displayResult(city, f) {
+function displayWeather(city, f) {
   resultCity.textContent = city.toUpperCase();
-
-  const now = new Date();
-  resultDate.textContent = now.toLocaleDateString('fr-FR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
+  resultDate.textContent = new Date().toLocaleDateString('fr-FR', {
+    weekday: 'long', day: 'numeric', month: 'long'
   });
 
-  const fmt = (val, suffix) => val !== null ? `${val}${suffix}` : '—';
-
   const items = [
-    { icon: '🌡️', value: fmt(f.tmin,     '°C'), label: 'T° min' },
-    { icon: '🌡️', value: fmt(f.tmax,     '°C'), label: 'T° max' },
-    { icon: '🌧️', value: fmt(f.rr10,     ' %'),  label: 'Prob. pluie' },
-    { icon: '☀️',  value: fmt(f.sunHours, ' h'),  label: 'Ensoleillement' },
+    { icon: '🌡️', val: `${f.tmin}°C`, label: 'Temp. Min' },
+    { icon: '🔥', val: `${f.tmax}°C`, label: 'Temp. Max' },
+    { icon: '🌧️', val: `${f.probarain}%`, label: 'Pluie' },
+    { icon: '☀️', val: `${f.sun_hours} h`, label: 'Soleil' }
   ];
 
-  metrics.innerHTML = items.map(({ icon, value, label }) => `
+  metrics.innerHTML = items.map(i => `
     <div class="metric">
-      <div class="metric-icon" aria-hidden="true">${icon}</div>
-      <div class="metric-value">${value}</div>
-      <div class="metric-label">${label}</div>
+      <span class="metric-icon">${i.icon}</span>
+      <div class="metric-value">${i.val}</div>
+      <div class="metric-label">${i.label}</div>
     </div>
   `).join('');
 
   result.classList.add('visible');
 }
+
+function showError(m) {
+  errorMsg.textContent = m;
+  errorMsg.classList.add('visible');
+}
+
+reloadBtn.addEventListener('click', () => location.reload());
